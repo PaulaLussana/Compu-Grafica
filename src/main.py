@@ -1,46 +1,79 @@
 from pathlib import Path
 from window import Window
 from texture import Texture
-from material import Material
+from material import Material, StandardMaterial
 from shader_program import ShaderProgram
+from scene import Scene, RayScene, RaySceneGPU
+from camera import Camera
 from cube import Cube
 from quad import Quad
-from camera import Camera
-from scene import RayScene
-import numpy as np
 
-# Constantes de pantalla
-WIDTH, HEIGHT = 400, 300
+WIDTH, HEIGHT = 800, 600
 
-# Crear ventana
-window = Window(WIDTH, HEIGHT, "Parcial")
+SCENE_TYPE = "gpu"  # Opciones: "normal", "cpu", "gpu"
 
-# Shaders
+scene_configs = {
+    "normal": {
+        "needs_sprite": False,
+        "sprite_channels_amount": 3,
+        "sprite_default_color": (255, 255, 255)
+    },
+    "cpu": {
+        "needs_sprite": True,
+        "sprite_channels_amount": 3,
+        "sprite_default_color": (255, 255, 255)
+    },
+    "gpu": {
+        "needs_sprite": True,
+        "sprite_channels_amount": 4,
+        "sprite_default_color": (255, 255, 255, 255)
+    }
+}
+
+
+config = scene_configs[SCENE_TYPE]
+
+window = Window(WIDTH, HEIGHT, f"Basic Graphic Engine - {SCENE_TYPE.upper()}")
+
 shader_dir = Path(__file__).resolve().parent.parent / "shaders"
 shader_program = ShaderProgram(window.ctx, shader_dir / "basic.vert", shader_dir / "basic.frag")
 shader_program_skybox = ShaderProgram(window.ctx, shader_dir / "sprite.vert", shader_dir / "sprite.frag")
 
-# Textura base (framebuffer del raytracer)
-skybox_texture = Texture(width=WIDTH, height=HEIGHT, channels_amount=3, color=(0, 0, 0))
+albedo_red = Texture("u_texture", WIDTH, HEIGHT, 3, None, (200, 10, 190))
+albedo_blue = Texture("u_texture", WIDTH, HEIGHT, 3, None, (0, 0, 255))
+albedo_pearl = Texture("u_texture", WIDTH, HEIGHT, 3, None, (120, 90, 90))
+sprite_texture = Texture(width=WIDTH, height=HEIGHT, channels_amount= config["sprite_channels_amount"], color= config["sprite_default_color"])
 
-# Materiales
-material = Material(shader_program)
-material_sprite = Material(shader_program_skybox, textures_data=[skybox_texture])
+material_plastic = StandardMaterial(shader_program, albedo_red, reflectivity=0.0)
+material_glass = StandardMaterial(shader_program, albedo_blue, reflectivity=0.2)
+material_ceramic = StandardMaterial(shader_program, albedo_pearl, reflectivity=0.1)
+material_sprite = Material(shader_program_skybox, textures_data=[sprite_texture])
 
-# Modelos
-cube1 = Cube((-2, 0, 2), (0, 45, 0), (1, 1, 1), "Cube1")
-cube2 = Cube((2, 0, 2), (0, 45, 0), (1, 0.5, 1), "Cube2")
-quad = Quad((0, 0, 0), (0, 0, 0), (6, 5, 1), name="Sprite", hittable=False)
+cube1 = Cube((2, 0, 5), (0, 0, 0), (1, 1, 1), name="Cube1")
+cube2 = Cube((-2, 0, 5), (0, 0, 0), (1, 1, 1), name="Cube2")
+quad = Quad((0, -3, 0), (-90, 0, 0), (10, 15, 1), name="Floor", animated=False)
+sprite = Quad((0, 0, 0), (0, 0, 0), (10, 15, 1), name="Sprite", animated=False, hittable=False)
 
-# Cámara
-camera = Camera((0, 0, 10), (0, 0, 0), (0, 1, 0), 45, window.width / window.height, 0.1, 100.0)
+camera = Camera((0, 0, 15), (0, 0, 0), (0, 1, 0), 45, WIDTH / HEIGHT, 0.01, 100.0)
+camera.set_sky_color(top=(16, 150, 222), bottom=(181, 224, 247))
 
-# Escena con raytracer
-scene = RayScene(window.ctx, camera, WIDTH, HEIGHT)
+if SCENE_TYPE == "normal":
+    scene = Scene(window.ctx, camera)
+    scene.add_object(cube1, material_plastic)
+    scene.add_object(cube2, material_glass)
 
-scene.add_object(quad, material_sprite)
-scene.add_object(cube1, material)
-scene.add_object(cube2, material)
+elif SCENE_TYPE == "cpu":
+    scene = RayScene(window.ctx, camera, WIDTH, HEIGHT)
+    scene.add_object(sprite, material_sprite)
+    scene.add_object(cube1, material_plastic)
+    scene.add_object(cube2, material_glass)
+    scene.add_object(quad, material_ceramic)
+
+elif SCENE_TYPE == "gpu":
+    scene = RaySceneGPU(window.ctx, camera, WIDTH, HEIGHT, sprite, material_sprite)
+    scene.add_object(cube1, material_plastic)
+    scene.add_object(cube2, material_glass)
+    scene.add_object(quad, material_ceramic)
 
 window.set_scene(scene)
 window.run()

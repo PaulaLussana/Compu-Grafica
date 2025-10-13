@@ -1,0 +1,142 @@
+#version 430
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(rgba32f, binding = 0) uniform image2D outputImage;
+
+// SSBOs
+layout(std430, binding = 0) buffer Models { 
+    mat4 modelMatrices[]; 
+};
+
+layout(std430, binding = 1) buffer InvModels { 
+    mat4 inverseModelMatrices[]; 
+};
+
+layout(std430, binding = 2) buffer Materials {
+    vec4 materials[]; // r,g,b,reflectivity
+};
+
+uniform vec3 cameraPosition;
+uniform mat4 inverseViewMatrix;
+uniform float fieldOView;
+uniform vec3 skyTopColor;
+uniform vec3 skyDownColor;
+
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+};
+
+// Utilidades
+float rand(vec2 co) {
+    return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+// Gradiente de cielo
+vec3 getSkyGradient(vec3 dir) {
+    float t = 0.5 * (dir.y + 1.0);
+    return mix(skyDownColor, skyTopColor, clamp(t, 0.0, 1.0));
+}
+
+// Caja con orientación (OBB) como intersección
+bool intersectOrientedBox(int index, vec3 ro, vec3 rd, out float tHit, out vec3 hitPos, out vec3 hitNormal) {
+    mat4 M  = modelMatrices[index];
+    mat4 iM = inverseModelMatrices[index];
+
+    // llevar rayo a espacio local del box
+    vec3 rayOriginLocal    = (iM * vec4(ro, 1.0)).xyz;
+    vec3 rayDirectionLocal = normalize((iM * vec4(rd, 0.0)).xyz);
+
+    // AABB unitaria en local: [-1,1]
+    vec3 boundsMin = vec3(-1.0);
+    vec3 boundsMax = vec3( 1.0);
+
+    vec3 invDir = 1.0 / rayDirectionLocal;
+    vec3 t0     = (boundsMin - rayOriginLocal) * invDir;
+    vec3 t1     = (boundsMax - rayOriginLocal) * invDir;
+
+    vec3 tmin3 = min(t0, t1);
+    vec3 tmax3 = max(t0, t1);
+
+    float tNear = max(max(tmin3.x, tmin3.y), tmin3.z);
+    float tFar  = min(min(tmax3.x, tmax3.y), tmax3.z);
+
+    if (tFar < 0.0 || tNear > tFar) return false;
+
+    float EPS = 1e-4;
+    float tLocal = (tNear > EPS) ? tNear : tFar;
+    vec3  hitLocal = rayOriginLocal + rayDirectionLocal * tLocal;
+
+    // elegir normal local por cara más cercana
+    vec3 dPos = abs(hitLocal - vec3( 1.0));
+    vec3 dNeg = abs(hitLocal - vec3(-1.0));  // equivalente a abs(hitLocal + 1)
+    vec3 dMin = min(dPos, dNeg);
+    float m = min(min(dMin.x, dMin.y), dMin.z);
+
+    vec3 nLocal = vec3(0.0);
+    if (dMin.x == m)      nLocal = vec3(sign(hitLocal.x), 0.0, 0.0);
+    else if (dMin.y == m) nLocal = vec3(0.0, sign(hitLocal.y), 0.0);
+    else                  nLocal = vec3(0.0, 0.0, sign(hitLocal.z));
+
+    // volver a mundo
+    vec3 worldPos = (M * vec4(hitLocal, 1.0)).xyz;
+    vec3 worldNrm = normalize((transpose(iM) * vec4(nLocal, 0.0)).xyz);
+
+    tHit     = length(worldPos - ro);
+    hitPos   = worldPos;
+    hitNormal= worldNrm;
+    return true;
+}
+
+// Sombreado simple
+vec3 calculateShading(vec3 surfaceColor, vec3 hitPos, vec3 hitNormal, vec3 viewDir) {
+    vec3 LIGHT_DIR   = normalize(vec3(0.5, 1.0, 0.2));
+    vec3 LIGHT_COLOR = vec3(1.0);
+
+    float NdotL = max(dot(hitNormal, LIGHT_DIR), 0.0);
+    vec3 ambient  = 0.05 * surfaceColor;
+    vec3 diffuse  = NdotL * surfaceColor;
+
+    vec3 halfVec  = normalize(LIGHT_DIR + viewDir);
+    float spec    = pow(max(dot(hitNormal, halfVec), 0.0), 64.0);
+    vec3 specular = 0.3 * spec * LIGHT_COLOR;
+
+    float shadowFactor = 1.0; // sin sombras por ahora
+
+    vec3 shaded = ambient + shadowFactor * (diffuse + specular);
+    return shaded;
+}
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imgSize     = imageSize(outputImage);
+    if (pixelCoords.x >= imgSize.x || pixelCoords.y >= imgSize.y) return;
+
+    float fovAdjustment = tan(radians(fieldOView) * 0.5);
+    float aspectRatio   = float(imgSize.x) / float(imgSize.y);
+
+    // Generar rayo primario
+    vec2 uv = (vec2(pixelCoords) + 0.5) / vec2(imgSize);
+    vec2 ndc = uv * 2.0 - 1.0;
+
+    vec3 rayDirCamera = normalize(vec3(ndc.x * aspectRatio * fovAdjustment, -ndc.y * fovAdjustment, -1.0));
+    vec3 rayDirection = normalize((inverseViewMatrix * vec4(rayDirCamera, 0.0)).xyz);
+    vec3 rayOrigin    = cameraPosition;
+
+    // fondo por defecto
+    vec3 skyColor = getSkyGradient(rayDirection);
+    vec3 finalColor = skyColor;
+
+    // por ahora, probamos solo contra el primer objeto si existe
+    float hitDist;
+    vec3 hitPos;
+    vec3 hitNorm;
+
+    if (intersectOrientedBox(0, rayOrigin, rayDirection, hitDist, hitPos, hitNorm)) {
+        vec3 mat = materials[0].rgb;
+        finalColor = calculateShading(mat, hitPos, hitNorm, normalize(-rayDirection));
+    }
+
+    imageStore(outputImage, pixelCoords, vec4(finalColor, 1.0));
+}
