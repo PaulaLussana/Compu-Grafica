@@ -1,5 +1,5 @@
 from moderngl import Attribute, Uniform
-import glms
+import glm
 
 class ShaderProgram:
     def __init__(self, ctx, vertex_shader_path, fragment_shader_path):
@@ -41,22 +41,16 @@ class ComputeShaderProgram:
             member = self.prog[name]
             if type(member) == Uniform:
                 uniforms.append(name)
-    
-    def run(self):
-        groups_x = (self.width + 15) // 16
-        groups_y = (self.height + 15) // 16
-
-        self.compute_shader.run(groups_x=groups_x, groups_y=groups_y, groups_z=1)
-        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-        self.output_graphics.render({"u_texture": self.texture_unit})
+                
+        self.uniforms = uniforms
 
     def set_uniform(self, name, value):
-        if name in self.prog:
+        if name in self.uniforms:
             uniform = self.prog[name]
             if isinstance(value, glm.mat4):
                 uniform.write(value.to_bytes())
-            if hasattr(uniform, "value"):
+            elif hasattr(uniform, "value"):
                 uniform.value = value
     
     def run(self, groups_x, groups_y, groups_z):
-        self.prog.run(groups_x=groups_x, groups_y=groups_y, groups_z=groups_z)
+        self.prog.run(group_x=groups_x, group_y=groups_y, group_z=groups_z)

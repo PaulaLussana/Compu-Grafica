@@ -79,7 +79,7 @@ class RaySceneGPU(Scene):
 
         super().__init__(self.ctx, self.camera)
 
-    def add_object(self, self_, model, material):
+    def add_object(self, model, material):
         self.objects.append(model)
         self.graphics[model.name] = ComputeGraphics(self.ctx, model, material)
 
@@ -123,7 +123,7 @@ class RaySceneGPU(Scene):
             graphics.create_inverse_transformation_matrix(self.inv_f, i)
             graphics.create_material_matrix(self.mats_f, i)
 
-    def _matrix_to_ssbo(self):
+    def _matrix_to_ssbbo(self):
         self.raytracer.matrix_to_ssbo(self.models_f, 0)
         self.raytracer.matrix_to_ssbo(self.inv_f, 1)
         self.raytracer.matrix_to_ssbo(self.mats_f, 2)

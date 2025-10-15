@@ -59,7 +59,7 @@ class RayTracerGPU:
     def resize(self, width, height):
         self.width, self.height = width, height
         self.output_texture = Texture("u_texture", width, height, 4, None, (255, 255, 255, 255))
-        self.output_graphics.bind_to_image("u_texture", self.output_unit, read=False, write=True)
+        self.output_graphics.bind_to_image("u_texture", self.texture_unit, read=False, write=True)
     
     def matrix_to_ssbo(self, matrix, binding = 0):
         buffer = self.ctx.buffer(matrix.tobytes())
