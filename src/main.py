@@ -30,7 +30,6 @@ scene_configs = {
     }
 }
 
-
 config = scene_configs[SCENE_TYPE]
 
 window = Window(WIDTH, HEIGHT, f"Basic Graphic Engine - {SCENE_TYPE.upper()}")

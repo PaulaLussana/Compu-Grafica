@@ -25,7 +25,7 @@ struct RayHit{
     vec3 position;       // Posición del impacto (mundo)
     vec3 normal;         // Normal de la superficie
     vec3 color;          // Color del material
-    float reflectivity;  // Reflectividad (0-1)
+    float reflectivity;  // Reflectividad (0-1)
 };
 
 bool intersectAxisAlignedBox(vec3 rayOrigin, vec3 rayDirection,
@@ -37,7 +37,7 @@ bool intersectAxisAlignedBox(vec3 rayOrigin, vec3 rayDirection,
     vec3 timeMax = max(timeAtMinPlane, timeAtMaxPlane);
     timeNear = max(max(timeMin.x, timeMin.y), timeMin.z);
     timeFar = min(min(timeMax.x, timeMax.y), timeMax.z);
-    return timeFar > max(timeNear, 0.0);
+    return timeFar > max(timeNear, 0.0);
 };
 
 bool intersectOrientedBox(int objectIndex, vec3 rayOriginWorld, vec3 rayDirectionWorld,
@@ -112,7 +112,7 @@ RayHit traverseBoundingVolumeHierarchy(vec3 rayOrigin, vec3 rayDirection) {
                 closestHit.position = hitPos;
                 closestHit.normal   = normalize(hitNorm);
 
-                vec4 mat = materialsMatrix[rightChildOrPrimitiveIndex];
+                vec4 mat = materials[rightChildOrPrimitiveIndex];
                 closestHit.color = mat.rgb;
                 closestHit.reflectivity = clamp(mat.a, 0.0, 1.0);
             }
@@ -157,7 +157,7 @@ void main() {
     vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
     imageStore(outputImage, pixelCoords, color);
 
-    float fovAdjustment = tan(radians(fieldOView) * 0.5);
+    float fovAdjustment = tan(radians(fieldOfView) * 0.5);
     float aspectRatio   = float(imgSize.x) / float(imgSize.y);
 
     vec2 uv = (vec2(pixelCoords) + 0.5) / vec2(imgSize);
@@ -165,13 +165,9 @@ void main() {
     ndc.x *= aspectRatio;
 
     vec3 rayDirCamera = vec3(ndc.x, ndc.y, -1.0);
-    rayDirCamera = normalize(rayDirCamera)
-    vec3 rayDirCamera = normalize(vec3(ndc.x * aspectRatio * fovAdjustment, -ndc.y * fovAdjustment, -1.0));
+    rayDirCamera = normalize(rayDirCamera);
     vec3 rayDirection = normalize((inverseViewMatrix * vec4(rayDirCamera, 0.0)).xyz);
-    vec3 rayOrigin = (inverseViewMatrix*vec4(cameraPosition, 1.0)).xyz 
-
-    vec3 skyColor = getSkyGradient(rayDirection);
-    vec3 finalColor = skyColor;
+    vec3 rayOrigin = (inverseViewMatrix*vec4(cameraPosition, 1.0)).xyz; 
 
     float hitDist;
     vec3 hitPos;
